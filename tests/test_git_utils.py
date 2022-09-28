@@ -110,7 +110,7 @@ def test_git_push_tags_if_called_then_gitpython_corresponding_methods_are_correc
     mocked_remote.push.assert_called_once_with("--tags")
 
 
-@git_clone_remote_repo
+@git_clone_remote_repo()
 def decorated_func(
     spam: int, repo: Union[Repo, str], jam: int
 ):  # pylint: disable=unused-argument

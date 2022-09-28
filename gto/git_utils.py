@@ -10,39 +10,35 @@ from git import Repo
 from gto.constants import remote_git_repo_regex
 
 
-def git_clone_remote_repo(f: Callable):
-    @wraps(f)
-    def wrapped_f(*args, **kwargs):
-        kwargs = _turn_args_into_kwargs(args, kwargs)
+def git_clone_remote_repo(push_tags: bool = False):
+    def execute_f_on_cloned_repo(f: Callable):
+        @wraps(f)
+        def wrapped_f(*args, **kwargs):
+            kwargs = _turn_args_into_kwargs(f, args, kwargs)
 
-        if isinstance(kwargs["repo"], str) and is_url_of_remote_repo(
-            repo=kwargs["repo"]
-        ):
-            try:
-                with cloned_git_repo(repo=kwargs["repo"]) as tmp_dir:
-                    kwargs["repo"] = tmp_dir
-                    return f(**kwargs)
-            except (NotADirectoryError, PermissionError) as e:
-                raise e.__class__(
-                    "Are you using windows with python < 3.9? "
-                    "This may be the reason of this error: https://bugs.python.org/issue42796. "
-                    "Consider upgrading python."
-                ) from e
+            if isinstance(kwargs["repo"], str) and is_url_of_remote_repo(
+                repo=kwargs["repo"]
+            ):
+                try:
+                    with cloned_git_repo(repo=kwargs["repo"]) as tmp_dir:
+                        kwargs["repo"] = tmp_dir
+                        result = f(**kwargs)
+                        if push_tags:
+                            git_push_tags(path=tmp_dir)
+                except (NotADirectoryError, PermissionError) as e:
+                    raise e.__class__(
+                        "Are you using windows with python < 3.9? "
+                        "This may be the reason of this error: https://bugs.python.org/issue42796. "
+                        "Consider upgrading python."
+                    ) from e
+            else:
+                result = f(**kwargs)
 
-        return f(**kwargs)
+            return result
 
-    def _turn_args_into_kwargs(
-        args: tuple, kwargs: Dict[str, object]
-    ) -> Dict[str, object]:
-        kwargs_complement = {
-            k: args[i]
-            for i, k in enumerate(inspect.getfullargspec(f).args)
-            if i < len(args)
-        }
-        kwargs.update(kwargs_complement)
-        return kwargs
+        return wrapped_f
 
-    return wrapped_f
+    return execute_f_on_cloned_repo
 
 
 def is_url_of_remote_repo(repo: str) -> bool:
@@ -73,3 +69,15 @@ def git_push_tags(path: str, remote_name: str = "origin") -> None:
     repo = Repo(path=path)
     remote = repo.remote(name=remote_name)
     remote.push("--tags")
+
+
+def _turn_args_into_kwargs(
+    f: Callable, args: tuple, kwargs: Dict[str, object]
+) -> Dict[str, object]:
+    kwargs_complement = {
+        k: args[i]
+        for i, k in enumerate(inspect.getfullargspec(f).args)
+        if i < len(args)
+    }
+    kwargs.update(kwargs_complement)
+    return kwargs
