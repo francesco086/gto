@@ -8,6 +8,7 @@ from typing import Callable, Dict
 from git import Repo
 
 from gto.constants import remote_git_repo_regex
+from gto.ui import echo
 
 
 def git_clone_remote_repo(push_tags: bool = False):
@@ -76,6 +77,7 @@ def git_push_tags(path: str, remote_name: str = "origin") -> None:
         remote_url,
     )
     remote.push("--tags")
+    echo("As the repo is remote, we executed the command `push --tags` for you")
 
 
 def _turn_args_into_kwargs(
