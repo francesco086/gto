@@ -47,6 +47,16 @@ def test_git_clone_remote_repo_if_repo_is_remote_url_then_clone_and_set_repo_to_
         )
 
 
+@skip_for_windows_py_lt_3_9
+def test_git_clone_remote_repo_if_repo_is_remote_url_and_request_push_tags_then_push_tags_is_called():
+    clone_dir = "tmp_clone_dir"
+    with patch("gto.git_utils.cloned_git_repo") as mocked_cloned_git_repo:
+        mocked_cloned_git_repo.return_value.__enter__.return_value = clone_dir
+        with patch("gto.git_utils.git_push_tags") as mocked_git_push_tags:
+            decorated_func_with_push_tags(repo=tests.resources.SAMPLE_HTTP_REMOTE_REPO)
+            mocked_git_push_tags.assert_called_once_with(path=clone_dir)
+
+
 @only_for_windows_py_lt_3_8
 def test_if_repo_is_remote_url_and_windows_os_error_then_hint_win_with_py_lt_3_9_may_be_the_cause():
     with pytest.raises(OSError) as e:
@@ -114,6 +124,11 @@ def test_git_push_tags_if_called_then_gitpython_corresponding_methods_are_correc
 def decorated_func(
     spam: int, repo: Union[Repo, str], jam: int
 ):  # pylint: disable=unused-argument
+    return repo
+
+
+@git_clone_remote_repo(push_tags=True)
+def decorated_func_with_push_tags(repo: Union[Repo, str]):
     return repo
 
 

@@ -87,6 +87,7 @@ def remove(repo: Union[str, Repo], name: str):
     return init_index_manager(path=repo).remove(name)
 
 
+@git_clone_remote_repo(push_tags=True)
 def register(
     repo: Union[str, Repo],
     name: str,
