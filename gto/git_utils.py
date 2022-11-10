@@ -12,33 +12,72 @@ from gto.constants import remote_git_repo_regex
 from gto.exceptions import GTOException, WrongArgs
 
 
-def remote_to_local(repo_arg: str):
+def args_to_kwargs(f: Callable):
+    @wraps(f)
+    def wrapped_f(*args, **kwargs):
+        kwargs = _turn_args_into_kwargs(f, args, kwargs)
+        return f(**kwargs)
+
+    return wrapped_f
+
+
+def check_kwargs(required_kwargs: List[str]):
     def wrap(f: Callable):
         @wraps(f)
-        def wrapped_f(*args, **kwargs):
-            kwargs = _turn_args_into_kwargs(f, args, kwargs)
+        def wrapped_f(**kwargs):
             _check_required_args_are_provided(
-                required_args=[repo_arg],
+                required_args=required_kwargs,
                 provided_kwargs=kwargs,
-                decorator_name="remote_to_local",
+                f_name=f.__name__,
             )
-
-            if is_url_of_remote_repo(repo=kwargs[repo_arg]):
-                try:
-                    with cloned_git_repo(repo=kwargs[repo_arg]) as tmp_dir:
-                        kwargs[repo_arg] = tmp_dir
-                        return f(**kwargs)
-                except (NotADirectoryError, PermissionError) as e:
-                    raise e.__class__(
-                        "Are you using windows with python < 3.9? "
-                        "This may be the reason of this error: https://bugs.python.org/issue42796. "
-                        "Consider upgrading python."
-                    ) from e
             return f(**kwargs)
 
         return wrapped_f
 
     return wrap
+
+
+def decorate_with_controller(
+    core: Callable,
+    core_args: List[str],
+    controller: Callable[[...], bool],
+    controller_args: List[str],
+):
+    def wrap(f: Callable):
+        @args_to_kwargs
+        @check_kwargs(required_kwargs=core_args + controller_args)
+        @wraps(f)
+        def wrapped_f(**kwargs):
+            if controller(**{a: kwargs[a] for a in controller_args}):
+                result = core(f=f, kwargs=kwargs)
+            else:
+                result = f(**kwargs)
+            return result
+
+        return wrapped_f
+
+    return wrap
+
+
+def remote_to_local(repo_arg: str):
+    def core(f: Callable, kwargs: dict):
+        try:
+            with cloned_git_repo(repo=kwargs[repo_arg]) as tmp_dir:
+                kwargs[repo_arg] = tmp_dir
+                return f(**kwargs)
+        except (NotADirectoryError, PermissionError) as e:
+            raise e.__class__(
+                "Are you using windows with python < 3.9? "
+                "This may be the reason of this error: https://bugs.python.org/issue42796. "
+                "Consider upgrading python."
+            ) from e
+
+    return decorate_with_controller(
+        core=core,
+        core_args=[repo_arg],
+        controller=is_url_of_remote_repo,
+        controller_args=[repo_arg],
+    )
 
 
 def set_push_on_remote_repo(f: Callable):
@@ -279,11 +318,12 @@ def _turn_args_into_kwargs(
 
 
 def _check_required_args_are_provided(
-    required_args: List[str], provided_kwargs: dict, decorator_name: str
+    required_args: List[str], provided_kwargs: dict, f_name: str
 ):
     missing_args = set(required_args) - set(provided_kwargs)
     if len(missing_args) > 0:
         raise ValueError(
-            f"Function decorated with `@{decorator_name}(...)` was called, "
-            f"but the function does not appear to have the required `{missing_args}` arguments."
+            f"Function `{f_name}` was called, "
+            f"but the function does not appear to have the `{missing_args}` arguments "
+            f"required by its decorator(s)."
         )
