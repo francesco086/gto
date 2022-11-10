@@ -1,3 +1,4 @@
+import functools
 import inspect
 import logging
 from contextlib import contextmanager
@@ -59,21 +60,22 @@ def decorate_with_controller(
     return wrap
 
 
-def remote_to_local(repo_arg: str):
-    def core(f: Callable, kwargs: dict):
-        try:
-            with cloned_git_repo(repo=kwargs[repo_arg]) as tmp_dir:
-                kwargs[repo_arg] = tmp_dir
-                return f(**kwargs)
-        except (NotADirectoryError, PermissionError) as e:
-            raise e.__class__(
-                "Are you using windows with python < 3.9? "
-                "This may be the reason of this error: https://bugs.python.org/issue42796. "
-                "Consider upgrading python."
-            ) from e
+def core_remote_to_local(repo_arg: str, f: Callable, kwargs: dict):
+    try:
+        with cloned_git_repo(repo=kwargs[repo_arg]) as tmp_dir:
+            kwargs[repo_arg] = tmp_dir
+            return f(**kwargs)
+    except (NotADirectoryError, PermissionError) as e:
+        raise e.__class__(
+            "Are you using windows with python < 3.9? "
+            "This may be the reason of this error: https://bugs.python.org/issue42796. "
+            "Consider upgrading python."
+        ) from e
 
+
+def remote_to_local(repo_arg: str):
     return decorate_with_controller(
-        core=core,
+        core=functools.partial(core_remote_to_local, repo_arg=repo_arg),
         core_args=[repo_arg],
         controller=is_url_of_remote_repo,
         controller_args=[repo_arg],
